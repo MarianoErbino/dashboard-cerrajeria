@@ -1,0 +1,69 @@
+let
+    Source = LSG_Backlog_RAW,
+
+    ToText  = (v as any) as text => try if v is null then "" else Text.From(v) otherwise "",
+    IsBlank = (v as any) as logical => Text.Trim(ToText(v)) = "",
+
+    AddTable =
+        Table.AddColumn(
+            Source,
+            "LSGTable",
+            each
+                let
+                    region = [Region],
+                    pais   = [Pais],
+                    zona   = [Zona_Final],
+                    cli    = [ClienteCanon],
+                    arch   = [FileName],
+
+                    tTry = try fxTransformLSGSheet([WB.Data], cli, arch),
+                    t0   = if tTry[HasError] then null else tTry[Value],
+
+                    t1   = if t0 = null then null else Table.AddColumn(t0, "Region", each region, type text),
+                    t2   = if t1 = null then null else Table.AddColumn(t1, "Pais",   each pais,   type text),
+                    t3   = if t2 = null then null else Table.AddColumn(t2, "Zona",   each zona,   type text)
+                in
+                    t3,
+            type any
+        ),
+
+    TablesOnly = List.Select(AddTable[LSGTable], each _ is table),
+
+    Empty =
+        #table(
+            type table [
+                ProductoID = text,
+                Family = text,
+                #"Item Type" = text,
+                FOB = number,
+                TtlOrders = number,
+                Pending = number,
+                Delivered = number,
+                SalesUnits_2026 = number,
+                SalesVol_2026 = number,
+                Volumen_TtlOrders = number,
+                Volumen_Pending = number,
+                Volumen_Delivered = number,
+                FechaSnapshot = date,
+                Año = Int64.Type,
+                MesNum = Int64.Type,
+                AñoMes = text,
+                Cliente = text,
+                FamiliaArchivo = text,
+                Archivo = text,
+                Region = text,
+                Pais = text,
+                Zona = text
+            ],
+            {}
+        ),
+
+    Combined = if List.Count(TablesOnly) = 0 then Empty else Table.Combine(TablesOnly),
+
+    TextoLimpio =
+        Table.TransformColumns(
+            Combined,
+            {{"Item Type", each Text.Clean(ToText(_)), type text}}
+        )
+in
+    TextoLimpio
